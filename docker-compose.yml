@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "80:80"
+    volumes:
+      - ./app:/app
+    env_file:
+      - .env
+
+  redis:
+    image: redis:latest
+
+  celery:
+    build: .
+    command: celery -A app.celery_app worker --loglevel=info
+    volumes:
+      - ./app:/app
+    env_file:
+      - .env
