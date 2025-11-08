@@ -13,7 +13,32 @@ async def get_or_create_tag(db: AsyncSession, tag_name: str):
         await db.flush()
     return tag
 
-async def create_knowledge(db: AsyncSession, text: str):
+
+async def get_user_by_username(db: AsyncSession, username: str):
+    q = await db.execute(select(models.User).filter(models.User.username == username))
+    return q.scalars().first()
+
+
+async def get_user_by_email(db: AsyncSession, email: str):
+    q = await db.execute(select(models.User).filter(models.User.email == email))
+    return q.scalars().first()
+
+
+async def get_user_by_phone(db: AsyncSession, phone: str):
+    q = await db.execute(select(models.User).filter(models.User.phone == phone))
+    return q.scalars().first()
+
+
+async def create_user(db: AsyncSession, username: str, hashed_password: str, name: str | None = None, phone: str | None = None, email: str | None = None):
+    user = models.User(username=username, hashed_password=hashed_password, name=name, phone=phone, email=email)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+
+async def create_knowledge(db: AsyncSession, text: str, user_id: int):
     item = models.KnowledgeItem(
         title=None,
         description=None,
@@ -22,13 +47,14 @@ async def create_knowledge(db: AsyncSession, text: str):
         status="pending",
         source="local"
     )
+    item.user_id = user_id
     db.add(item)
     await db.commit()
     await db.refresh(item)
     # 返回刚创建的 id（避免在这里直接返回 ORM 对象导致后续懒加载）
     return item
 
-async def list_knowledge(db: AsyncSession, skip: int = 0, limit: int = 10, q: str | None = None) -> List[models.KnowledgeItem]:
+async def list_knowledge(db: AsyncSession, skip: int = 0, limit: int = 10, q: str | None = None, user_id: Optional[int] = None) -> List[models.KnowledgeItem]:
     """List knowledge items with optional search across title, description, summary and tag names.
 
     Args:
@@ -41,6 +67,10 @@ async def list_knowledge(db: AsyncSession, skip: int = 0, limit: int = 10, q: st
         list of KnowledgeItem
     """
     stmt = select(models.KnowledgeItem).options(selectinload(models.KnowledgeItem.tags))
+
+    # always scope to the given user if provided
+    if user_id is not None:
+        stmt = stmt.filter(models.KnowledgeItem.user_id == user_id)
 
     if q:
         pattern = f"%{q}%"
@@ -64,16 +94,15 @@ async def list_knowledge(db: AsyncSession, skip: int = 0, limit: int = 10, q: st
     res = await db.execute(stmt)
     return res.scalars().unique().all()
 
-async def get_knowledge(db: AsyncSession, item_id: int) -> Optional[models.KnowledgeItem]:
-    q = await db.execute(
-        select(models.KnowledgeItem)
-        .options(selectinload(models.KnowledgeItem.tags))
-        .filter(models.KnowledgeItem.id == item_id)
-    )
+async def get_knowledge(db: AsyncSession, item_id: int, user_id: Optional[int] = None) -> Optional[models.KnowledgeItem]:
+    stmt = select(models.KnowledgeItem).options(selectinload(models.KnowledgeItem.tags)).filter(models.KnowledgeItem.id == item_id)
+    if user_id is not None:
+        stmt = stmt.filter(models.KnowledgeItem.user_id == user_id)
+    q = await db.execute(stmt)
     return q.scalars().first()
 
-async def delete_knowledge(db: AsyncSession, item_id: int) -> bool:
-    item = await get_knowledge(db, item_id)
+async def delete_knowledge(db: AsyncSession, item_id: int, user_id: Optional[int] = None) -> bool:
+    item = await get_knowledge(db, item_id, user_id=user_id)
     if item:
         await db.delete(item)
         await db.commit()

@@ -8,18 +8,39 @@
 
         <div class="header-right">
           <a-menu mode="horizontal" theme="dark" :selectedKeys="[active]" class="main-menu">
-            <a-menu-item key="/">
-              <HomeOutlined />
-              <router-link to="/"> 输入 </router-link>
+            <a-menu-item key="/input">
+              <HomeOutlined style="margin-right:3px;" />
+              <router-link to="/input"> 输入 </router-link>
             </a-menu-item>
             <a-menu-item key="/list">
-              <UnorderedListOutlined />
+              <UnorderedListOutlined style="margin-right:3px;" />
               <router-link to="/list"> 列表 </router-link>
             </a-menu-item>
             <a-menu-item key="/about">
               <router-link to="/about"> 关于 </router-link>
             </a-menu-item>
           </a-menu>
+          <div class="user-area">
+            <template v-if="username">
+              <a-dropdown>
+                <template #overlay>
+                  <a-menu @click="onUserMenuClick">
+                    <a-menu-item key="change">修改密码</a-menu-item>
+                    <a-menu-item key="logout">登出</a-menu-item>
+                  </a-menu>
+                </template>
+                <a-button type="link" class="username-btn">
+                  <span class="username-text">{{ username }}<DownOutlined style="margin-left:2px;" /></span>
+                </a-button>
+              </a-dropdown>
+            </template>
+            <template v-else>
+              <a-menu mode="horizontal" theme="dark" :selectedKeys="[active]" class="main-menu">
+                <a-menu-item key="/login"><router-link to="/login">登录</router-link></a-menu-item>
+                <a-menu-item key="/register"><router-link to="/register">注册</router-link></a-menu-item>
+              </a-menu>
+            </template>
+          </div>
         </div>
       </a-layout-header>
       <a-layout-content class="app-content">
@@ -29,21 +50,52 @@
   </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeOutlined, UnorderedListOutlined } from '@ant-design/icons-vue'
+import { HomeOutlined, UnorderedListOutlined, DownOutlined } from '@ant-design/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 
+const username = ref('')
+
+function handleAuthLoginEvent(e) {
+  username.value = (e && e.detail && e.detail.username) || localStorage.getItem('username') || ''
+}
+
+onMounted(() => {
+  username.value = localStorage.getItem('username') || ''
+  window.addEventListener('auth:login', handleAuthLoginEvent)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('auth:login', handleAuthLoginEvent)
+})
+
 const active = computed(() => {
   if (route.path.startsWith('/list')) return '/list'
-  if (route.path === '/' || route.path.startsWith('/input')) return '/'
+  if (route.path === '/') return '/list'
   if (route.path.startsWith('/about')) return '/about'
+  if (route.path.startsWith('/login')) return '/login'
+  if (route.path.startsWith('/register')) return '/register'
   return ''
 })
 
 function goHome() { router.push('/') }
+function doLogout() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('username')
+  username.value = ''
+  router.push('/login')
+}
+
+function onUserMenuClick({ key }) {
+  if (key === 'change') {
+    router.push('/change-password')
+  } else if (key === 'logout') {
+    doLogout()
+  }
+}
 </script>
 
 <style scoped>
@@ -98,6 +150,27 @@ function goHome() { router.push('/') }
 .main-menu .ant-menu-item a {
   color: inherit;
   display: inline-block
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+}
+
+.user-area a {
+  color: #fff;
+}
+
+.username-text {
+  color: #fff;
+  font-weight: 600;
+}
+
+.username-btn {
+  padding: 0;
+  height: 32px;
 }
 
 @media (max-width: 600px) {

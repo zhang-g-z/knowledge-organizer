@@ -13,6 +13,7 @@ knowledge_tag_table = Table(
 class KnowledgeItem(Base):
     __tablename__ = "knowledge_items"
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), index=True, nullable=True)
     description = Column(String(1024), nullable=True)
     summary = Column(Text, nullable=True)
@@ -25,6 +26,7 @@ class KnowledgeItem(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     tags = relationship("Tag", secondary=knowledge_tag_table, back_populates="items")
+    owner = relationship("User", back_populates="items")
 
 class Tag(Base):
     __tablename__ = "tags"
@@ -32,3 +34,16 @@ class Tag(Base):
     name = Column(String(64), unique=True, nullable=False, index=True)
 
     items = relationship("KnowledgeItem", secondary=knowledge_tag_table, back_populates="tags")
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(150), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    name = Column(String(150), nullable=True)
+    phone = Column(String(32), unique=True, nullable=True, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    items = relationship("KnowledgeItem", back_populates="owner")

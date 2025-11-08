@@ -55,6 +55,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { SendOutlined } from '@ant-design/icons-vue'
 import api from '../services/api'
 import createWS from '../services/ws'
+import { message } from 'ant-design-vue'
 
 const text = ref('')
 const loading = ref(false)
@@ -70,8 +71,8 @@ async function submit(){
     lastItem.value = res.data
     text.value = ''
   }catch(err){
-    // use console.error in UI; keep simple alert for now
-    alert('提交失败: ' + (err.response?.data?.detail || err.message))
+    // show error message via AntD message
+    message.error('提交失败: ' + (err.response?.data?.detail || err.message))
   }finally{
     loading.value = false
   }

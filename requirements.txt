@@ -17,4 +17,8 @@ requests
 celery[redis]
 redis>=4.6.0
 cryptography
+# auth deps
+python-jose[cryptography]
+passlib[bcrypt]
 # eventlet
+email-validator

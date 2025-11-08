@@ -1,14 +1,31 @@
 import os
 import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .core.config import settings
 from .database import Base, engine
 from .routers import items
+from .routers import auth
 import redis.asyncio as aioredis  # or redis.asyncio usage
 
-app = FastAPI(title="Knowledge Organizer", docs_url="/api/docs", openapi_url="/api/openapi.json")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan handler: create DB tables on startup (development convenience).
+    Note: For production you should use Alembic migrations instead of auto-creating tables.
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("Database tables ensured/created.")
+    except Exception as e:
+        print("Warning: failed to create tables on startup:", e)
+    yield
+
+
+app = FastAPI(title="Knowledge Organizer", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,6 +36,7 @@ app.add_middleware(
 
 # 1) 先注册 API 路由（/api/...）
 app.include_router(items.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 
 # 2) 注册 WebSocket 路由（确保在 StaticFiles mount 之前）
 @app.websocket("/api/ws")
