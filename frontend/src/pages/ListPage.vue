@@ -65,22 +65,26 @@
           </a-space>
         </template>
       </a-table-column>
-    </a-table>
+
+      </a-table>
 
     <div style="text-align:right; margin-top:16px">
       <a-pagination :current="page" :pageSize="pageSize" :total="total" @change="onPageChange" />
     </div>
   </a-card>
 
-  <OriginalModal v-if="showModal" :id="currentId" @close="closeModal" />
+  <a-modal v-model:open="showModal" title="原文" width="80%" :bodyStyle="{ maxHeight: '60vh', overflow: 'auto' }" @cancel="closeModal" :footer="null">
+    <div v-if="origLoading">加载中...</div>
+    <pre v-else style="white-space:pre-wrap">{{ original }}</pre>
+  </a-modal>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { EyeOutlined, DeleteOutlined, ReloadOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import api from '../services/api'
-import OriginalModal from '../components/OriginalModal.vue'
+// OriginalModal replaced by inline a-modal
 
 const items = ref([])
 const page = ref(1)
@@ -88,6 +92,8 @@ const pageSize = 10
 const hasMore = ref(true)
 const showModal = ref(false)
 const currentId = ref(null)
+const original = ref('')
+const origLoading = ref(false)
 const keyword = ref('')
 const loading = ref(false)
 
@@ -114,6 +120,20 @@ function onSearch(){ page.value = 1; load() }
 
 function showOriginal(id){ currentId.value = id; showModal.value = true }
 
+async function loadOriginal(id){
+  if(!id) { original.value = ''; return }
+  origLoading.value = true
+  try{
+    const res = await api.get(`/items/${id}/original`)
+    original.value = res.data.original_text
+  }catch(err){
+    console.error('加载原文失败', err)
+    original.value = '加载失败'
+  }finally{
+    origLoading.value = false
+  }
+}
+
 async function remove(id){
   try{
     await api.delete(`/items/${id}`)
@@ -124,6 +144,10 @@ async function remove(id){
 }
 
 function closeModal(){ showModal.value = false; currentId.value = null }
+
+watch(() => showModal.value, (v) => {
+  if(v && currentId.value) loadOriginal(currentId.value)
+})
 
 function newItem(){
   // push to input page if available

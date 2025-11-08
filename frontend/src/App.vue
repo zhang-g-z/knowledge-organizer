@@ -53,6 +53,7 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { HomeOutlined, UnorderedListOutlined, DownOutlined } from '@ant-design/icons-vue'
+import { Modal } from 'ant-design-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -73,6 +74,7 @@ onBeforeUnmount(() => {
 })
 
 const active = computed(() => {
+  if (route.path.startsWith('/input')) return '/input'
   if (route.path.startsWith('/list')) return '/list'
   if (route.path === '/') return '/list'
   if (route.path.startsWith('/about')) return '/about'
@@ -93,7 +95,13 @@ function onUserMenuClick({ key }) {
   if (key === 'change') {
     router.push('/change-password')
   } else if (key === 'logout') {
-    doLogout()
+    Modal.confirm({
+      title: '确认退出登录？',
+      content: '确定要退出当前账号吗？',
+      okText: '确定',
+      cancelText: '取消',
+      onOk() { doLogout() }
+    })
   }
 }
 </script>
