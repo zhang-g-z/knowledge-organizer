@@ -1,5 +1,20 @@
 fastapi
-celery
-redis
-openai
-uvicorn
+uvicorn[standard]
+SQLAlchemy>=1.4
+pymysql
+jieba
+alembic
+python-multipart
+jinja2
+requests
+openai>=1.0.0
+pydantic-settings
+aiomysql
+jieba
+python-multipart
+jinja2
+requests
+celery[redis]
+redis>=4.6.0
+cryptography
+# eventlet

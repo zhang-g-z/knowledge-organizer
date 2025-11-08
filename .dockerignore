@@ -1,0 +1,19 @@
+# 忽略所有 __pycache__ 目录（包括子目录）
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 忽略前端开发目录（构建后不需要）
+frontend/
+
+# 忽略开发环境文件
+.git/
+.DS_Store
+*.md
+docker-compose.yml
+Dockerfile
+
+# 忽略 Python 包缓存和测试文件
+*.egg-info/
+.pytest_cache/

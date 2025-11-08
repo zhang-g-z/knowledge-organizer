@@ -1,22 +1,30 @@
-version: '3.8'
-
+version: "3.8"
 services:
   web:
     build: .
     ports:
-      - "80:80"
-    volumes:
-      - ./app:/app
-    env_file:
-      - .env
-
-  redis:
-    image: redis:latest
-
-  celery:
+      - "8000:80"
+    environment:
+      - DATABASE_URL=mysql+aiomysql://root:qwe#113.@host.docker.internal:3306/knowledge_db?charset=utf8mb4
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - FRONTEND_DIST_DIR=frontend_dist
+    command: uvicorn app.main:app --host 0.0.0.0 --port 80
+    depends_on:
+      - redis  # 确保 Redis 先启动
+    restart: unless-stopped  # 容器崩溃时自动重启
+  worker:
     build: .
-    command: celery -A app.celery_app worker --loglevel=info
-    volumes:
-      - ./app:/app
-    env_file:
-      - .env
+    environment:
+      - DATABASE_URL=mysql+aiomysql://root:qwe#113.@host.docker.internal:3306/knowledge_db?charset=utf8mb4
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    command: celery -A app.celery_task.celery worker --loglevel=info
+    depends_on:
+      - redis  # 确保 Redis 先启动
+    restart: unless-stopped  # 容器崩溃时自动重启
+  redis:
+    image: public.ecr.aws/docker/library/redis:8.4-rc1-alpine3.22
+    ports:
+      - "63790:6379"  # 可选：暴露端口以便外部访问
+    restart: unless-stopped  # 容器崩溃时自动重启
