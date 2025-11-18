@@ -40,26 +40,32 @@ async def _run_extraction_and_update(item_id: int):
         async with AsyncSessionLocal() as db:
             q = await db.execute(__import__('sqlalchemy').select(models.KnowledgeItem).filter(models.KnowledgeItem.id == item_id))
             item = q.scalars().first()
-        if not item:
-            logger.error("Item %s not found", item_id)
-            return
-        item.status = "processing"
-        await db.commit()
-        await db.refresh(item)
-        try:
-            extracted = await extract_from_text_async(item.original_text)
-            from app.crud import update_after_extraction
-            await update_after_extraction(db, item_id, extracted)
-            payload = json.dumps({"id": item_id, "status": "done"})
-            # 使用同步 redis client 发布消息
-            redis_client.publish(settings.REDIS_PUBSUB_CHANNEL, payload)
-        except Exception as e:
-            logger.exception("Extraction failed for item %s: %s", item_id, e)
-            item.status = "failed"
-            item.llm_raw = (item.llm_raw or "") + f"\n\nTASK_ERROR: {e}"
+            if not item:
+                logger.error("Item %s not found", item_id)
+                return
+                # mark processing and commit; afterwards re-load a fresh instance attached to this session
+            item.status = "processing"
+            print(item)
             await db.commit()
-            payload = json.dumps({"id": item_id, "status": "failed", "error": str(e)})
-            redis_client.publish(settings.REDIS_PUBSUB_CHANNEL, payload)
+            # re-fetch attached instance to avoid 'not persistent within this Session' on refresh/update
+            item = await db.get(models.KnowledgeItem, item_id)
+            try:
+                extracted = await extract_from_text_async(item.original_text)
+                from app.crud import update_after_extraction
+                await update_after_extraction(db, item_id, extracted)
+                payload = json.dumps({"id": item_id, "status": "done"})
+                # 使用同步 redis client 发布消息
+                redis_client.publish(settings.REDIS_PUBSUB_CHANNEL, payload)
+            except Exception as e:
+                logger.exception("Extraction failed for item %s: %s", item_id, e)
+                # re-fetch to ensure we have a session-bound instance
+                item = await db.get(models.KnowledgeItem, item_id)
+                if item:
+                    item.status = "failed"
+                    item.llm_raw = (item.llm_raw or "") + f"\n\nTASK_ERROR: {e}"
+                    await db.commit()
+                payload = json.dumps({"id": item_id, "status": "failed", "error": str(e)})
+                redis_client.publish(settings.REDIS_PUBSUB_CHANNEL, payload)
     finally:
         # Dispose engine to close all connections and free resources
         try:
