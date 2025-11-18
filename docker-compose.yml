@@ -28,3 +28,6 @@ services:
     ports:
       - "63790:6379"  # 可选：暴露端口以便外部访问
     restart: unless-stopped  # 容器崩溃时自动重启
+
+# 重建某一个容器
+# docker compose up -d --no-deps --build worker

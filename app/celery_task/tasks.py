@@ -12,9 +12,12 @@ import redis  # 同步 redis 用于在 Celery worker（同步）中发布通知
 
 logger = get_task_logger(__name__)
 
-# Celery worker: async engine for DB updates
-async_engine = create_async_engine(settings.DATABASE_URL, future=True, echo=False, pool_pre_ping=True)
-AsyncSessionLocal = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+# Note: do NOT create async engine/session at module import time when using
+# a prefork worker (Celery). Creating asyncio-based engines before forking
+# can bind internals to the parent's event loop and cause "Future attached
+# to a different loop" errors in worker processes. We'll create the engine
+# lazily inside the task so it's created in the worker process and its
+# event loop.
 
 # 使用同步 redis client (worker process is sync) 来 publish 通知
 redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=True)
@@ -22,6 +25,7 @@ redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=True)
 @celery.task(bind=True)
 def extract_and_update(self, item_id: int):
     try:
+        # Run the async workflow in a fresh event loop for this task.
         asyncio.run(_run_extraction_and_update(item_id))
         return {"ok": True}
     except Exception as e:
@@ -29,14 +33,17 @@ def extract_and_update(self, item_id: int):
         return {"ok": False, "error": str(e)}
 
 async def _run_extraction_and_update(item_id: int):
-    async with AsyncSessionLocal() as db:
-        q = await db.execute(__import__('sqlalchemy').select(models.KnowledgeItem).filter(models.KnowledgeItem.id == item_id))
-        item = q.scalars().first()
+    # Create async engine and sessionmaker inside the worker process / task.
+    engine = create_async_engine(settings.DATABASE_URL, future=True, echo=False, pool_pre_ping=True)
+    AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        async with AsyncSessionLocal() as db:
+            q = await db.execute(__import__('sqlalchemy').select(models.KnowledgeItem).filter(models.KnowledgeItem.id == item_id))
+            item = q.scalars().first()
         if not item:
             logger.error("Item %s not found", item_id)
             return
         item.status = "processing"
-        print(item)
         await db.commit()
         await db.refresh(item)
         try:
@@ -53,3 +60,9 @@ async def _run_extraction_and_update(item_id: int):
             await db.commit()
             payload = json.dumps({"id": item_id, "status": "failed", "error": str(e)})
             redis_client.publish(settings.REDIS_PUBSUB_CHANNEL, payload)
+    finally:
+        # Dispose engine to close all connections and free resources
+        try:
+            await engine.dispose()
+        except Exception:
+            pass
